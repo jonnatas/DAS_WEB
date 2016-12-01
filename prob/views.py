@@ -2,27 +2,28 @@ from django.http import HttpResponse
 from django.shortcuts import render, render_to_response
 from django.template import loader, RequestContext
 from .forms import NameForm
-
+from django.conf import settings
+from django.core.files.storage import FileSystemStorage
 import numpy as np
 import matplotlib.pyplot as plt
-
 import urllib
 import h5py
-
 import sys
 import os
-
 from scipy import misc
-
-labels = []
-
 from IPython.display import clear_output # to clear command output when this notebook gets too cluttered
 
+labels = []
+images_path = 'images/'
+
+#Caregar o caffe
+#**********************************************************
+#
 home_dir = os.getenv("HOME")
 caffe_root = os.getenv("CAFFE_ROOT")  # this file should be run from {caffe_root}/examples (otherwise change this line)
 sys.path.insert(0, os.path.join(caffe_root, 'python'))
 
-images_path = home_dir+'/Imagens/pycoffe'
+
 import caffe
 
 if os.path.isfile(os.path.join(caffe_root, 'models/bvlc_reference_caffenet/bvlc_reference_caffenet.caffemodel')):
@@ -40,8 +41,6 @@ model_weights = os.path.join(caffe_root, 'models','bvlc_reference_caffenet','bvl
 net = caffe.Net(model_def,
                 model_weights,
                 caffe.TEST)
-
-
 
 # load the mean ImageNet image (as distributed with Caffe) for subtraction
 mu = np.load(os.path.join(caffe_root, 'python','caffe','imagenet','ilsvrc_2012_mean.npy'))
@@ -63,9 +62,36 @@ if not os.path.exists(labels_file):
     
 labels = np.loadtxt(labels_file, str, delimiter='\t')
 
+# Function to process the query/test image
+#**************************************************************************************'''
 
+def predict_imageNet(image_filename):
+    image = caffe.io.load_image(image_filename)
+    net.blobs['data'].data[...] = transformer.preprocess('data', image)
 
+    # perform classification
+    net.forward()
 
+    # obtain the output probabilities
+    output_prob = net.blobs['prob'].data[0]
+
+    # sort top five predictions from softmax output
+    top_inds = output_prob.argsort()[::-1][:5]
+
+    plt.imshow(image)
+    plt.axis('off')
+
+    print 'probabilities and labels:'
+    predictions = zip(output_prob[top_inds], labels[top_inds]) # showing only labels (skipping the index)
+    for p in predictions:
+        print p
+    
+    # plt.figure(figsize=(15, 3))
+    # plt.plot(output_prob)
+    return output_prob
+
+# Function to pre-process (or load) image dataset
+#*
 def load_dataset(images_path):
     # Load/build a dataset of vectors (i.e. a big matrix) of probabilities
     # from the ImageNet ILSVRC 2012 challenge using Caffe.
@@ -114,68 +140,9 @@ def load_dataset(images_path):
     
     return vectors, img_files
 
-def predict_imageNet(image_filename):
-    image = caffe.io.load_image(image_filename)
-    net.blobs['data'].data[...] = transformer.preprocess('data', image)
 
-    net.forward()
-
-    output_prob = net.blobs['prob'].data[0]
-
-    top_inds = output_prob.argsort()[::-1][:5]
-
-    plt.imshow(image)
-    plt.axis('off')
-
-    predictions = zip(output_prob[top_inds], labels[top_inds])
-
-    return predictions
-
-
-def get_hist(filename):
-    image =  misc.imread(filename)
-    image = image[::4,::4,:]
-    # Normalizing images:
-    im_norm = (image-image.mean())/image.std()
-    
-    # Computing a 10-bin histogram in the range [-e, +e] (1 standard deviationto 255 for each of the colours:
-    # (the first element [0] is the histogram, the second [1] is the array of bins.)
-    hist_red = np.histogram(im_norm[:,:,0], range=(-np.e,+np.e))[0] 
-    hist_green = np.histogram(im_norm[:,:,1], range=(-np.e,+np.e))[0]
-    hist_blue = np.histogram(im_norm[:,:,2], range=(-np.e,+np.e))[0]
-    # Concatenating them into a 30-dimensional vector:
-    histogram = np.concatenate((hist_red, hist_green, hist_blue)).astype(np.float)
-    return histogram/histogram.sum()
-
-
-def load_dataset_hist(images_path):
-    # Load/build a dataset of vectors (i.e. a big matrix) of RGB histograms.
-    vectors_filename = os.path.join(images_path, 'vectors_hist.h5')
-
-    if os.path.exists(vectors_filename):
-        print 'Loading image signatures (colour histograms) from ' + vectors_filename
-        with h5py.File(vectors_filename, 'r') as f:
-            vectors = f['vectors'][()]
-            img_files = f['img_files'][()]
-
-    else:
-        # Build a list of JPG files (change if you want other image types):
-        os.listdir(images_path)
-        img_files = [f for f in os.listdir(images_path) if (('jpg' in f) or ('JPG') in f)]
-
-        print 'Loading all images to the memory and pre-processing them...'
-        vectors = np.zeros((len(img_files), 30))
-        for (f,n) in zip(img_files, range(len(img_files))):
-            print '%d %s'% (n,f)
-            vectors[n] = get_hist(os.path.join(images_path, f))
-                    
-        print 'Saving descriptors and file indices to ' + vectors_filename
-        with h5py.File(vectors_filename, 'w') as f:
-            f.create_dataset('vectors', data=vectors)
-            f.create_dataset('img_files', data=img_files)
-    
-    return vectors, img_files
-
+#  Nearest neighbour class
+#* ************************************************
 
 class NearestNeighbors:
     def __init__(self, K=10, Xtr=[], images_path='Photos/', img_files=[], labels=np.empty(0)):
@@ -205,65 +172,18 @@ class NearestNeighbors:
         self.labels = labels
         
     def predict(self, x):
-        """ x is a test (query) sample vector of 1 x D dimensions """
-    
-        # Compare x with the training (dataset) vectors
-        # using the L1 distance (sum of absolute value differences)
-
-        # p = 1.
-        # distances = np.power(np.sum(np.power(np.abs(X-x),p), axis = 1), 1./p)
         distances = np.sum(np.abs(self.Xtr-x), axis = 1)
-        # distances = 1-np.dot(X,x)
-    
-        # plt.figure(figsize=(15, 3))
-        # plt.plot(distances)
-        # print np.argsort(distances)
         return np.argsort(distances) # returns an array of indices of of the samples, sorted by how similar they are to x.
 
     def retrieve(self, x):
         # The next 3 lines are for debugging purposes:
-        plt.figure(figsize=(5, 1))
-        plt.plot(x)
-        plt.title('Query vector')
-
         nearest_neighbours = self.predict(x)
+        images = []
 
         for n in range(self.K):
             idx = nearest_neighbours[n]
-        
-            # predictions = zip(self.Xtr[idx][top_inds], labels[top_inds]) # showing only labels (skipping the index)
-            # for p in predictions:
-            #     print p
             
-            ## 
-            # In the block below, instead of just showing the image in Jupyter notebook,
-            # you can create a website showing results.
-            image =  misc.imread(os.path.join(self.images_path, self.img_files[idx]))
-            plt.figure()
-            plt.imshow(image)
-            plt.axis('off')
-            if self.labels.shape[0]==0:
-                plt.title('im. idx=%d' % idx)
-            else: # Show top label in the title, if possible:
-                top_inds = self.Xtr[idx].argsort()[::-1][:5]
-                plt.title('%s   im. idx=%d' % (labels[top_inds[0]][10:], idx))
-                
-            # The next 3 lines are for debugging purposes:
-            plt.figure(figsize=(5, 1))
-            plt.plot(self.Xtr[idx])       
-            plt.title('Vector of the element ranked %d' % n)
-
-
-
-
-KNN = NearestNeighbors(images_path=images_path)
-vectors, img_files = load_dataset_hist(images_path)
-KNN.setXtr(vectors)
-
-# Freeing memory:
-del vectors
-KNN.setFilesList(img_files)
-
+            images.append('/' + (os.path.join(self.images_path, self.img_files[idx])))
 
 
 def index(request):
@@ -292,19 +212,3 @@ def detail(request):
         'predictions': predictions,
     }
     return render(request,'prob/detail.html', context)
-
-'''
-def index(request):
-    if request.method == 'POST' and request.FILES['myfile']:
-        myfile = request.FILES['myfile']
-        fs = FileSystemStorage()
-        filename = fs.save(myfile.name, myfile)
-        uploaded_file_url = fs.url(filename)
-
-        images_vector = create_images_vector(uploaded_file_url)
-        return render(request , 'webapp/show.html', {
-            'uploaded_file_url': uploaded_file_url ,
-            'images_vector' : images_vector
-        })
-    return render(request, 'webapp/index.html')
-'''

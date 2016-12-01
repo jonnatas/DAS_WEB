@@ -21,6 +21,8 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
+    # Django apps
+    'bootstrap_themes',
     'prob.apps.ProbConfig',
     'django.contrib.admin',
     'django.contrib.auth',

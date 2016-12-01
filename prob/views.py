@@ -114,9 +114,6 @@ def load_dataset(images_path):
     
     return vectors, img_files
 
-
-
-
 def predict_imageNet(image_filename):
     image = caffe.io.load_image(image_filename)
     net.blobs['data'].data[...] = transformer.preprocess('data', image)
@@ -130,20 +127,9 @@ def predict_imageNet(image_filename):
     plt.imshow(image)
     plt.axis('off')
 
-    print 'probabilities and labels:'
     predictions = zip(output_prob[top_inds], labels[top_inds])
 
-    string = ""
-
-    for p in predictions:
-        string += str(p) + "</br>"
-
-    print '#######################'
-    print string
-    print '#######################'
-    #return string
-    return string
-    
+    return predictions
 
 
 def get_hist(filename):
@@ -292,16 +278,33 @@ def index(request):
 
 def detail(request):
 
-	my_image_url = request.POST['url']
+    my_image_url = request.POST['url']
+    #fs = FileSystemStorage()
+    uploaded_file_url = "image.jpg"
 
-	urllib.urlretrieve (my_image_url, "image.jpg")
+    urllib.urlretrieve (my_image_url, uploaded_file_url)
+    #uploaded_file_url = fs.url(my_image_url)
+    predictions = predict_imageNet(uploaded_file_url)
 
-	string = predict_imageNet('image.jpg')
+    template = loader.get_template('prob/detail.html')
 
-	template = loader.get_template('prob/detail.html')
-
-	context = {
-        'latest_question_list': '',
+    context = {
+        'predictions': predictions,
     }
+    return render(request,'prob/detail.html', context)
 
-	return HttpResponse(string)
+'''
+def index(request):
+    if request.method == 'POST' and request.FILES['myfile']:
+        myfile = request.FILES['myfile']
+        fs = FileSystemStorage()
+        filename = fs.save(myfile.name, myfile)
+        uploaded_file_url = fs.url(filename)
+
+        images_vector = create_images_vector(uploaded_file_url)
+        return render(request , 'webapp/show.html', {
+            'uploaded_file_url': uploaded_file_url ,
+            'images_vector' : images_vector
+        })
+    return render(request, 'webapp/index.html')
+'''

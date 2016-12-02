@@ -185,30 +185,29 @@ class NearestNeighbors:
             
             images.append('/' + (os.path.join(self.images_path, self.img_files[idx])))
 
+def calcule_prob_image(my_image_url):
+    KNN = NearestNeighbors(images_path=images_path)
+    vectors, img_files = load_dataset(images_path)
+    KNN.setXtr(vectors)
+    del vectors
+    KNN.setFilesList(img_files)
+
+    my_image_url = list(my_image_url)
+    my_image_url.pop(0)
+    my_image_url = "".join(my_image_url)
+
+    images_vector = KNN.retrieve(predict_imageNet(my_image_url))
+    return images_vector
 
 def index(request):
-
-	template = loader.get_template('prob/index.html')
-
-	context = {
-        'latest_question_list': '',
-    }
-
-	return render(request,'prob/index.html')
-
-def detail(request):
-
-    my_image_url = request.POST['url']
-    #fs = FileSystemStorage()
-    uploaded_file_url = "image.jpg"
-
-    urllib.urlretrieve (my_image_url, uploaded_file_url)
-    #uploaded_file_url = fs.url(my_image_url)
-    predictions = predict_imageNet(uploaded_file_url)
-
-    template = loader.get_template('prob/detail.html')
-
-    context = {
-        'predictions': predictions,
-    }
-    return render(request,'prob/detail.html', context)
+    if request.method == 'POST' and request.FILES['myfile']:
+        myfile = request.FILES['myfile']
+        fs = FileSystemStorage()
+        filename = fs.save(myfile.name, myfile)
+        uploaded_file_url = fs.url(filename)
+        images_vector = calcule_prob_image(uploaded_file_url)
+        return render(request , 'prob/show.html', {
+            'uploaded_file_url': uploaded_file_url ,
+            'images_vector' : images_vector
+        })
+    return render(request, 'prob/index.html')

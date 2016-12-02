@@ -12,7 +12,12 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 
 import os
 
+
+
+# Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 SECRET_KEY = 'k*73z+-!izlz9i*onx4)^tx5#&ahdurw2a5rcm_z+_y)@4=a9*'
 

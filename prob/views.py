@@ -14,7 +14,7 @@ from scipy import misc
 from IPython.display import clear_output # to clear command output when this notebook gets too cluttered
 
 labels = []
-images_path = 'images/'
+images_path = 'media/'
 
 #Caregar o caffe
 #**********************************************************
@@ -176,14 +176,15 @@ class NearestNeighbors:
         return np.argsort(distances) # returns an array of indices of of the samples, sorted by how similar they are to x.
 
     def retrieve(self, x):
-        # The next 3 lines are for debugging purposes:
         nearest_neighbours = self.predict(x)
         images = []
 
         for n in range(self.K):
             idx = nearest_neighbours[n]
-            
-            images.append('/' + (os.path.join(self.images_path, self.img_files[idx])))
+            image = (os.path.join(self.images_path, self.img_files[idx]))
+            images.append('/' + image)
+
+        return images
 
 def calcule_prob_image(my_image_url):
     KNN = NearestNeighbors(images_path=images_path)

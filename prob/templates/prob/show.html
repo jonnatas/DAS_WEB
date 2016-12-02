@@ -2,13 +2,21 @@
 
 {% block content %}
 
-{% if uploaded_file_url %}
-<p>File uploaded at: </p>
-<img src="{{uploaded_file_url}}" width="{{200}}" height="{{200}}"/>
-
-  {% for x in images_vector %}
-  <img src="{{x}}" width="{{200}}" height="{{200}}"/>
-  {% endfor %}
-{% endif %}
-
+<div class="container">
+	<div class="row">
+		{% if uploaded_file_url %}
+		<div class="row img-thumbnails">
+			<div class="col-md-6">
+				<p>File uploaded at: </p>
+				<img src="{{uploaded_file_url}}" class="img-thumbnail" width="{{600}}" height="{{500}}"/>
+			</div>
+			  {% for x in images_vector %}
+			  	<div class="col-md-4">
+			  		<img class="img-thumbnail" src="{{x}}" width="{{400}}" height="{{300}}"/>
+			  	</div>
+			  {% endfor %}
+		</div>
+		{% endif %}
+	</div>
+</div>
 {% endblock %}
